@@ -1,0 +1,122 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+.prose-waiver {
+  line-height: 1.55;
+  font-size: clamp(0.9rem, 2.5vw, 1rem);
+}
+
+.prose-waiver h1 {
+  font-size: clamp(1.25rem, 4vw, 1.75rem);
+  font-weight: 700;
+  margin: 0 0 0.75rem;
+}
+
+.prose-waiver h2 {
+  font-size: clamp(1.1rem, 3.2vw, 1.4rem);
+  font-weight: 600;
+  margin: 1rem 0 0.5rem;
+}
+
+.prose-waiver h3 {
+  font-size: clamp(1rem, 3vw, 1.2rem);
+  font-weight: 600;
+  margin: 0.75rem 0 0.5rem;
+}
+
+.prose-waiver p {
+  margin: 0 0 0.75rem;
+}
+
+.prose-waiver ul,
+.prose-waiver ol {
+  margin: 0 0 0.75rem;
+  padding-left: 1.5rem;
+}
+
+.prose-waiver li {
+  margin: 0.25rem 0;
+}
+
+.prose-waiver table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 0.75rem;
+  display: block;
+  overflow-x: auto;
+}
+
+.prose-waiver th,
+.prose-waiver td {
+  border: 1px solid #cbd5e1;
+  padding: 0.5rem;
+  text-align: left;
+}
+
+.prose-waiver strong {
+  font-weight: 700;
+}
+
+.prose-waiver em {
+  font-style: italic;
+}
+
+/* ---------- Print stylesheet for /admin/qr-codes ----------
+   The cards have Tailwind print: utilities on the elements themselves;
+   these rules ensure that when the user clicks "Print this page", each
+   QR card gets its own sheet, no background colours are stripped by
+   browsers, and buttons/inputs are hidden (so the printed page shows
+   only the codes + URLs meant to be posted on the office counter). */
+@media print {
+  @page {
+    size: letter;
+    margin: 0.6in;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  /* Hide anything non-essential (the admin header inputs, nav, form shell
+     outside the rendered grid) that would waste ink on the printed copy. */
+  header button,
+  header label,
+  header input,
+  .no-print,
+  nav,
+  aside {
+    display: none !important;
+  }
+
+  /* Each card gets its own page (office staff posts them separately). */
+  .qr-card {
+    page-break-after: always;
+    break-after: page;
+  }
+
+  /* Keep big code images sharp when the printer rasterizes. */
+  .qr-card img {
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+  }
+}

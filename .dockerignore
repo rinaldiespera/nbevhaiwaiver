@@ -1,0 +1,35 @@
+# ------ Provider-agnostic docker ignore ------
+# Exclude build artifacts, test fixtures, and any local secrets so they
+# never end up in the image.
+node_modules
+.next
+out
+.git
+.gitignore
+.github
+.trae
+.vscode
+.idea
+coverage
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ------ Secrets / local-only env (REQUIRED EXCLUDED) ------
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+
+# ------ Local test fixtures / transient test-only stores ------
+.blob-store-test
+.blob-store
+fixtures
+.temp
+
+# ------ Drizzle / ts incremental build caches ------
+tsconfig.tsbuildinfo
+drizzle/meta/_journal.json.bak
+*.bak

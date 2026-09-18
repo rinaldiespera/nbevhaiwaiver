@@ -1,0 +1,137 @@
+# ---------------------------------------------------------------------------
+# Provider-agnostic Docker Compose for NBEVHAI Cloud Waiver App
+#
+# Services:
+#   db   — Postgres 16 (generic official image, no provider brand)
+#   web  — Next.js 15 production server (standalone build, port 3000)
+#   migrate — one-shot: runs migrations/0001_init.sql against 'db' before
+#              starting 'web' via depends_on condition.
+#
+# All env var names are copied verbatim from .env.example (generic names;
+# no provider-specific brands anywhere).
+#
+# First-time:
+#   docker compose up -d --build
+# Check status:
+#   docker compose ps
+# Tear down:
+#   docker compose down                 # keeps DB volume
+#   docker compose down -v --remove-orphans   # also wipes DB volume (RESETS ALL DATA)
+# ---------------------------------------------------------------------------
+
+services:
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      # Generic internal credentials used ONLY inside this compose network.
+      # Override with a .env file (see .env.example) before production deploy.
+      POSTGRES_USER:     app_db_user
+      POSTGRES_PASSWORD: app_db_pass_change_me
+      POSTGRES_DB:       nbevhai_waiver
+    volumes:
+      # Named volume: survives `docker compose down`. Wipe with -v flag above.
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test:         ["CMD-SHELL", "pg_isready -U app_db_user -d nbevhai_waiver"]
+      interval:     5s
+      timeout:      5s
+      retries:      20
+      start_period: 10s
+    # Local host publish of 5432 is DISABLED by default because another
+    # Postgres instance (e.g. the Neighborly stack) is usually already
+    # bound to 127.0.0.1:5432 on the host.  If you need host-side access
+    # to this NBEVHAI-only Postgres (e.g. for psql/drizzle-studio),
+    # uncomment the line below and choose a free port (e.g. 5433):
+    # ports:
+    #   - "127.0.0.1:5433:5432"
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # The 'builder' image has a full node_modules tree (including devDeps
+      # like drizzle-kit and pg) because it is derived from deps-all.
+      target: builder
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # POSTGRES_URL uses the compose-internal DNS name 'db' and the
+      # credentials defined above in the 'db' service.  Values must match.
+      POSTGRES_URL: "postgresql://app_db_user:app_db_pass_change_me@db:5432/nbevhai_waiver?sslmode=disable"
+    command: >
+      sh -c "
+        echo '[migrate] Waiting for Postgres...' ;
+        npx --no-install drizzle-kit migrate --config=drizzle.config.ts ||
+          ( echo '[migrate] drizzle-kit migrate failed (did you set POSTGRES_URL in .env?)' ; exit 1 ) ;
+        echo '[migrate] Drizzle migrations complete. Applying idempotent raw SQL guarantees...' ;
+        node --input-type=module -e \"
+          const { Pool } = await import('pg');
+          const fs = await import('node:fs');
+          const pool = new Pool({ connectionString: process.env.POSTGRES_URL });
+          const sql = fs.readFileSync('/app/migrations/0001_init.sql','utf8');
+          await pool.query(sql);
+          await pool.end();
+          console.log('[migrate] Raw SQL idempotent migrations OK.');
+        \" ;
+        echo '[migrate] Done.' ;
+      "
+    working_dir: /app
+    volumes:
+      - ./migrations:/app/migrations:ro
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      # ---- Mandatory runtime vars (generic, no provider brands) ----
+      POSTGRES_URL:       "postgresql://app_db_user:app_db_pass_change_me@db:5432/nbevhai_waiver?sslmode=disable"
+      API_BEARER_TOKEN:   "change-me-before-deploy"
+      WAIVER_PUBLIC_BASE_URL: "http://localhost:3000"
+      NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+      # ---- Waiver-page access gating (new in this version) ----
+      # Long random HMAC secret. Min 24 chars required at boot.
+      WAIVER_HASH_SECRET: "change-me-waiver-hash-secret-at-least-24-chars-long-please"
+      # true = require ?h= signature on /waiver/<slug>; false = transition
+      # mode that still allows unsigned URLs during QR reprint rollout.
+      WAIVER_HASH_REQUIRED: "false"
+      # ---- Admin/Neighborly API auth toggle ----
+      # false = local-dev skip Bearer auth on /api/* + /admin;
+      # true = production-enforce Bearer token for all /api calls.
+      ADMIN_API_AUTH_REQUIRED: "false"
+      # ---- Blob storage (default: local filesystem inside container) ----
+      BLOB_DRIVER:        "local"
+      BLOB_LOCAL_DIR:     "/app/.blob-store"
+      # ---- S3 driver (fill in ONLY when BLOB_DRIVER=s3; keep empty otherwise) ----
+      S3_ENDPOINT:        ""
+      S3_REGION:          "auto"
+      S3_ACCESS_KEY_ID:   ""
+      S3_SECRET_ACCESS_KEY: ""
+      S3_BUCKET:          ""
+      S3_PUBLIC_URL_BASE: ""
+    volumes:
+      # Named volume so uploaded DOCX and signature PNGs survive container restarts.
+      # If you later switch BLOB_DRIVER=s3 this volume is unused and can be removed.
+      - blob_store:/app/.blob-store
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3000/',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""]
+      interval: 20s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+volumes:
+  db_data:
+    driver: local
+  blob_store:
+    driver: local
