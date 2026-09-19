@@ -46,7 +46,7 @@ class LocalBlobStore extends BlobStoreBackend {
     const isVercelServerless =
       (envStr("VERCEL") || envStr("AWS_LAMBDA_FUNCTION_NAME")) !== "";
     const defaultDir = isVercelServerless ? "/tmp/.blob-store" : "./.blob-store";
-    this.root = path.resolve(process.cwd(), envStr("BLOB_LOCAL_DIR", defaultDir));
+    this.root = path.resolve(/*turbopackIgnore: true*/ process.cwd(), envStr("BLOB_LOCAL_DIR", defaultDir));
     fs.mkdirSync(this.root, { recursive: true });
   }
   private safeFsPath(rawKey: string): string {
