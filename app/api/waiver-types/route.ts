@@ -120,8 +120,10 @@ export async function POST(req: NextRequest) {
         `DOCX exceeds size limit of ${MAX_DOCX_BYTES} bytes`
       );
     }
+    const cause = (e as Error).message ?? String(e);
+    const stack = (e as Error).stack ?? "";
     return NextResponse.json(
-      { error: "Failed to store uploaded DOCX" },
+      { error: "Failed to store uploaded DOCX", cause, stack },
       { status: 500 }
     );
   }
