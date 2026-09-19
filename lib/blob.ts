@@ -115,6 +115,7 @@ class VercelBlobStore extends BlobStoreBackend {
   async getAsBase64(urlOrKey: string): Promise<string> {
     const url = this.requireAbsoluteUrl(urlOrKey);
     const result = await vercelGet(url, {
+      access: "private",
       token: this.vercelToken(),
     });
     if (!result || result.statusCode !== 200) {
@@ -143,7 +144,7 @@ class VercelBlobStore extends BlobStoreBackend {
   async exists(urlOrKey: string): Promise<boolean> {
     try {
       const url = this.requireAbsoluteUrl(urlOrKey);
-      await vercelHead(url, { token: this.vercelToken() });
+      await vercelHead(url, { access: "private", token: this.vercelToken() });
       return true;
     } catch {
       return false;
