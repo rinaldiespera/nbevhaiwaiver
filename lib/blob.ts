@@ -8,6 +8,11 @@ import {
   S3Client,
   S3ClientConfig,
 } from "@aws-sdk/client-s3";
+import {
+  put as vercelPut,
+  get as vercelGet,
+  head as vercelHead,
+} from "@vercel/blob";
 
 export const MAX_DOCX_BYTES = 5 * 1024 * 1024;
 export const MAX_SIGNATURE_BYTES = 500 * 1024;
@@ -76,6 +81,66 @@ class LocalBlobStore extends BlobStoreBackend {
   async exists(urlOrKey: string): Promise<boolean> {
     const p = this.safeFsPath(this.extractKey(urlOrKey));
     return fs.existsSync(p);
+  }
+}
+
+// ---------------- Vercel Blob backend (OIDC-integrated on Vercel) ----------------
+class VercelBlobStore extends BlobStoreBackend {
+  async put(opts: BlobPutOpts): Promise<string> {
+    if (opts.maxSizeBytes != null && opts.body.length > opts.maxSizeBytes) {
+      throw new SizeError(
+        `Upload exceeds size limit: ${opts.body.length} > ${opts.maxSizeBytes}`
+      );
+    }
+    const blob = await vercelPut(opts.key, opts.body, {
+      access: "public",
+      contentType: opts.contentType,
+      addRandomSuffix: false,
+    });
+    return blob.url;
+  }
+  private requireAbsoluteUrl(urlOrKey: string): string {
+    if (urlOrKey.startsWith("http://") || urlOrKey.startsWith("https://")) {
+      return urlOrKey;
+    }
+    throw new Error(
+      "VercelBlobStore requires absolute blob URL; got relative key: " + urlOrKey
+    );
+  }
+  async getAsBase64(urlOrKey: string): Promise<string> {
+    const url = this.requireAbsoluteUrl(urlOrKey);
+    const result = await vercelGet(url, { access: "public" });
+    if (!result || result.statusCode !== 200) {
+      throw new Error(
+        "VercelBlobStore getAsBase64 failed: status=" +
+          (result?.statusCode ?? "null")
+      );
+    }
+    const chunks: Uint8Array[] = [];
+    const reader = result.stream.getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+    let totalLen = 0;
+    for (const c of chunks) totalLen += c.length;
+    const out = Buffer.alloc(totalLen);
+    let offset = 0;
+    for (const c of chunks) {
+      out.set(c as unknown as Uint8Array, offset);
+      offset += c.length;
+    }
+    return out.toString("base64");
+  }
+  async exists(urlOrKey: string): Promise<boolean> {
+    try {
+      const url = this.requireAbsoluteUrl(urlOrKey);
+      await vercelHead(url);
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
 
@@ -197,6 +262,7 @@ type GlobalWithStore = typeof globalThis & {
 function buildStore(): BlobStoreBackend {
   const driver = (envStr("BLOB_DRIVER", "local") || "local").toLowerCase();
   if (driver === "s3") return new S3BlobStore();
+  if (driver === "vercel") return new VercelBlobStore();
   return new LocalBlobStore();
 }
 
