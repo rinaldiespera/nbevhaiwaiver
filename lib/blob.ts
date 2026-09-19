@@ -21,7 +21,8 @@ export const DOCX_MIME =
 export const PNG_MIME = "image/png";
 
 function envStr(k: string, fallback = ""): string {
-  return process.env[k] ?? fallback;
+  const v = process.env[k];
+  return v != null && v !== "" ? v : fallback;
 }
 
 export interface BlobPutOpts {
