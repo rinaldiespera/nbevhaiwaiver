@@ -42,10 +42,10 @@ class LocalBlobStore extends BlobStoreBackend {
   private readonly root: string;
   constructor() {
     super();
-    this.root = path.resolve(
-      process.cwd(),
-      envStr("BLOB_LOCAL_DIR", "./.blob-store")
-    );
+    const isVercelServerless =
+      (envStr("VERCEL") || envStr("AWS_LAMBDA_FUNCTION_NAME")) !== "";
+    const defaultDir = isVercelServerless ? "/tmp/.blob-store" : "./.blob-store";
+    this.root = path.resolve(process.cwd(), envStr("BLOB_LOCAL_DIR", defaultDir));
     fs.mkdirSync(this.root, { recursive: true });
   }
   private safeFsPath(rawKey: string): string {
