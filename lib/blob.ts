@@ -87,6 +87,9 @@ class LocalBlobStore extends BlobStoreBackend {
 
 // ---------------- Vercel Blob backend (OIDC-integrated on Vercel) ----------------
 class VercelBlobStore extends BlobStoreBackend {
+  private vercelToken(): string | undefined {
+    return envStr("BLOB_READ_WRITE_TOKEN") || undefined;
+  }
   async put(opts: BlobPutOpts): Promise<string> {
     if (opts.maxSizeBytes != null && opts.body.length > opts.maxSizeBytes) {
       throw new SizeError(
@@ -94,9 +97,10 @@ class VercelBlobStore extends BlobStoreBackend {
       );
     }
     const blob = await vercelPut(opts.key, opts.body, {
-      access: "public",
+      access: "private",
       contentType: opts.contentType,
       addRandomSuffix: false,
+      token: this.vercelToken(),
     });
     return blob.url;
   }
@@ -110,7 +114,9 @@ class VercelBlobStore extends BlobStoreBackend {
   }
   async getAsBase64(urlOrKey: string): Promise<string> {
     const url = this.requireAbsoluteUrl(urlOrKey);
-    const result = await vercelGet(url, { access: "public" });
+    const result = await vercelGet(url, {
+      token: this.vercelToken(),
+    });
     if (!result || result.statusCode !== 200) {
       throw new Error(
         "VercelBlobStore getAsBase64 failed: status=" +
@@ -137,7 +143,7 @@ class VercelBlobStore extends BlobStoreBackend {
   async exists(urlOrKey: string): Promise<boolean> {
     try {
       const url = this.requireAbsoluteUrl(urlOrKey);
-      await vercelHead(url);
+      await vercelHead(url, { token: this.vercelToken() });
       return true;
     } catch {
       return false;
