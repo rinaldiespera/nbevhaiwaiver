@@ -138,3 +138,34 @@ export async function GET(
   if (rows.length === 0) return notFoundResponse("Waiver type not found");
   return NextResponse.json(serialize(rows[0]));
 }
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const authFail = adminOrUnauthorized(_req);
+  if (authFail) return authFail;
+  const id = (await params).id;
+  if (!id) return notFoundResponse("Waiver type id required");
+  const existing = await db
+    .select()
+    .from(schema.waiverType)
+    .where(eq(schema.waiverType.id, id))
+    .limit(1);
+  if (existing.length === 0) return notFoundResponse("Waiver type not found");
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(schema.signedWaiver)
+      .where(eq(schema.signedWaiver.waiverTypeId, id));
+    await tx.delete(schema.waiverType).where(eq(schema.waiverType.id, id));
+  });
+  setCachedHtml(makeCacheKey(existing[0].id, existing[0].currentVersion), "");
+  return NextResponse.json({
+    ok: true,
+    deleted: {
+      id: existing[0].id,
+      name: existing[0].name,
+      slug: existing[0].slug,
+    },
+  });
+}
