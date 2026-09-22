@@ -2,10 +2,10 @@
 import { randomUUID } from "node:crypto";
 const TOKEN = "e4e2e59dde29f2c12b974c36be042ef2982256aece59918e";
 const BASE  = "https://nbevhaiwaiver.vercel.app";
-const doc = new Document({ sections: [{ children: [new Paragraph("smoke " + randomUUID())] }] });
+const doc = new Document({ sections: [{ children: [new Paragraph("Neighborly integration smoke " + randomUUID())] }] });
 const buf = await Packer.toBuffer(doc);
 const fd = new FormData();
-fd.set("name", "smoke-" + randomUUID().slice(0,8));
+fd.set("name", "pool-smoke-" + randomUUID().slice(0,6));
 fd.set("docx", new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }), "smoke.docx");
 const r = await fetch(BASE + "/api/waiver-types", { method: "POST", headers: { authorization: "Bearer " + TOKEN }, body: fd });
 const body = await r.text();

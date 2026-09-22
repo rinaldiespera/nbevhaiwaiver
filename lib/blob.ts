@@ -5,6 +5,7 @@ import {
   GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
+  DeleteObjectCommand,
   S3Client,
   S3ClientConfig,
 } from "@aws-sdk/client-s3";
@@ -12,6 +13,7 @@ import {
   put as vercelPut,
   get as vercelGet,
   head as vercelHead,
+  del as vercelDelete,
 } from "@vercel/blob";
 
 export const MAX_DOCX_BYTES = 5 * 1024 * 1024;
@@ -36,6 +38,7 @@ abstract class BlobStoreBackend {
   abstract put(opts: BlobPutOpts): Promise<string>;
   abstract getAsBase64(urlOrKey: string): Promise<string>;
   abstract exists(urlOrKey: string): Promise<boolean>;
+  abstract delete(urlOrKey: string): Promise<void>;
 }
 
 // ---------------- Local filesystem backend ----------------
@@ -82,6 +85,18 @@ class LocalBlobStore extends BlobStoreBackend {
   async exists(urlOrKey: string): Promise<boolean> {
     const p = this.safeFsPath(this.extractKey(urlOrKey));
     return fs.existsSync(p);
+  }
+  async delete(urlOrKey: string): Promise<void> {
+    const p = this.safeFsPath(this.extractKey(urlOrKey));
+    try {
+      if (fs.existsSync(p)) {
+        fs.rmSync(p, { force: true });
+      }
+    } catch (e) {
+      const code = (e as any)?.code;
+      if (code === "ENOENT") return;
+      throw e;
+    }
   }
 }
 
@@ -149,6 +164,10 @@ class VercelBlobStore extends BlobStoreBackend {
     } catch {
       return false;
     }
+  }
+  async delete(urlOrKey: string): Promise<void> {
+    const url = this.requireAbsoluteUrl(urlOrKey);
+    await vercelDelete(url, { token: this.vercelToken() });
   }
 }
 
@@ -248,6 +267,12 @@ class S3BlobStore extends BlobStoreBackend {
       return false;
     }
   }
+  async delete(urlOrKey: string): Promise<void> {
+    const { key } = this.parseUrlOrKey(urlOrKey);
+    await this.client.send(
+      new DeleteObjectCommand({ Bucket: this.bucket, Key: key })
+    );
+  }
 }
 
 // ---------------- Errors ----------------
@@ -293,6 +318,27 @@ export async function getFileAsBase64(urlOrKey: string): Promise<string> {
 
 export async function fileExists(urlOrKey: string): Promise<boolean> {
   return store.exists(urlOrKey);
+}
+
+export async function deleteFile(urlOrKey: string): Promise<void> {
+  if (!urlOrKey) return;
+  try {
+    await store.delete(urlOrKey);
+  } catch (e) {
+    // For idempotency, treat "not found" as success.
+    const msg = String((e as any)?.message ?? "");
+    const code = String((e as any)?.code ?? "");
+    if (
+      code === "ENOENT" ||
+      msg.includes("status 404") ||
+      msg.includes("status 410") ||
+      msg.includes("Not Found") ||
+      /404|410/.test(msg)
+    ) {
+      return;
+    }
+    throw e;
+  }
 }
 
 export function randomBlobId(bytes = 16): string {

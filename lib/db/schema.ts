@@ -67,7 +67,39 @@ export const signedWaiver = pgTable(
   })
 );
 
+export const waiverHousekeepingLog = pgTable(
+  "waiver_housekeeping_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    jobName: text("job_name").notNull(),
+    triggerType: text("trigger_type").notNull(),
+    status: text("status").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    retentionDays: integer("retention_days"),
+    cutoffIso: timestamp("cutoff_iso", { withTimezone: true }),
+    rowsSelected: integer("rows_selected").notNull().default(0),
+    rowsDeleted: integer("rows_deleted").notNull().default(0),
+    rowsFailed: integer("rows_failed").notNull().default(0),
+    blobsDeleted: integer("blobs_deleted").notNull().default(0),
+    blobsFailed: integer("blobs_failed").notNull().default(0),
+    errorMessages: text("error_messages").$type<string[]>().notNull().default([]),
+    details: text("details"),
+  },
+  (t) => ({
+    housekeepingLogStartedAtIdx: index("waiver_housekeeping_log_started_at_idx").on(
+      t.startedAt.desc()
+    ),
+    housekeepingLogStatusStartedIdx: index("waiver_housekeeping_log_status_started_idx").on(
+      t.status,
+      t.startedAt
+    ),
+  })
+);
+
 export type WaiverType = typeof waiverType.$inferSelect;
 export type NewWaiverType = typeof waiverType.$inferInsert;
 export type SignedWaiver = typeof signedWaiver.$inferSelect;
 export type NewSignedWaiver = typeof signedWaiver.$inferInsert;
+export type WaiverHousekeepingLog = typeof waiverHousekeepingLog.$inferSelect;
+export type NewWaiverHousekeepingLog = typeof waiverHousekeepingLog.$inferInsert;
